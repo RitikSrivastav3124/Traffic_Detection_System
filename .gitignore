@@ -1,0 +1,16 @@
+*.pt
+*.pth
+*.onnx
+*.engine
+
+*.mp4
+*.avi
+*.jpg
+*.png
+
+runs/
+videos/
+venv/
+YOLOX/
+ByteTrack/
+__pycache__/
