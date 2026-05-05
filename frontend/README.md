@@ -1,70 +1,94 @@
-# Getting Started with Create React App
+# 🚦 Traffic Detection System - Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This is the frontend part of the Traffic Detection System. It provides a user-friendly interface to interact with the backend AI model and visualize traffic detection results.
 
-## Available Scripts
+---
 
-In the project directory, you can run:
+## 📌 Overview
 
-### `npm start`
+The frontend is designed to:
+- Display processed traffic videos/images
+- Show detected vehicles and objects
+- Provide a simple UI for user interaction
+- Communicate with the backend server for real-time detection
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+This project is part of a larger system that uses computer vision (YOLO-based models) for traffic analysis and monitoring.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+---
 
-### `npm test`
+## 🛠️ Tech Stack
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- React.js (Frontend Library)
+- JavaScript / JSX
+- CSS / Styling
+- Axios / Fetch API (for backend communication)
 
-### `npm run build`
+Frontend applications in such systems typically follow a **Single Page Application (SPA)** architecture for smooth UI rendering and interaction :contentReference[oaicite:0]{index=0}
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+---
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
 
-### `npm run eject`
+---
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## ⚙️ Installation & Setup
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+1. Clone the repository:
+```bash
+git clone https://github.com/RitikSrivastav3124/Traffic_Detection_System.git
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+```
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+2. Navigate to Frontend:
+```bash
+cd frontend
+```
+3. Install dependencies:
+```bash
+npm install
+```
+4. Start development server:
+```bash
+npm start
+```
+5. Open in browser:
+```bash
+http://localhost:3000
+```
 
-## Learn More
+---
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## 🔗 Backend Integration
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+The frontend communicates with the backend server to:
+- Send video/image input
+- Receive detection results
+- Display bounding boxes and analytics
 
-### Code Splitting
+Typical workflow:
+1. User uploads input
+2. Request sent to backend API
+3. Backend processes using YOLO
+4. Response displayed on UI
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+---
 
-### Analyzing the Bundle Size
+## ✨ Features
+- 📹 Upload traffic videos/images
+- 🚗 Real-time vehicle detection display
+- 📊 Visualization of detection results
+- 🔄 Backend API integration
+- 💻 Responsive UI
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+---
 
-### Making a Progressive Web App
+## 🚀 Future Improvements
+- Live camera feed support
+- Dashboard analytics (charts, stats)
+- User authentication system
+- Performance optimization
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+---
 
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## 📜 License
+This project is for educational purposes.
