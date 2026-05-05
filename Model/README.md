@@ -38,7 +38,7 @@ The system takes input from **multiple cameras (up to 4)** and performs:
 1. Input is taken from **4 camera streams** (DroidCam / IP Webcam / CCTV)
 2. Each frame is processed using YOLO
 3. Vehicles are detected and counted per lane
-4. Priority score is calculated:
+4. Priority score is calculated using vehicle count and waiting time
 5. Lane with highest priority gets GREEN signal
 6. Emergency vehicles override normal logic
 
@@ -58,10 +58,10 @@ The system takes input from **multiple cameras (up to 4)** and performs:
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+git clone https://github.com/RitikSrivastav3124/Traffic_Detection_System.git
 
 # Go to project folder
-cd YOUR_REPO_NAME
+cd Traffic_Detection
 
 # Install dependencies
 pip install -r requirements.txt
@@ -72,12 +72,12 @@ pip install -r requirements.txt
 ### 🔹 Single Camera (Testing)
 
 ```bash
-python your_script.py --weights yolov5s.pt --source 0 --view-img
+python detect_details2.py --weights yolov5s.pt --source 0 --view-img
 ```
 ### 🔹 Multiple Camera (Testing)
 
 ```bash
-python your_script.py --weights yolov5s.pt \
+python detect_realtime.py --weights yolov5s.pt \
 --source 0 1 2 3 \
 --view-img
 ```
@@ -97,27 +97,25 @@ python your_script.py --weights yolov5s.pt \
 ---
 Traffic_Detection/
 1. Model/ # YOLO model files
-2. utils/ # Helper functions
-3. output/ # Output videos
-4. your_script.py # Main detection script
-5. requirements.txt
-6. README.md
-
+2. output/ # Output videos
+3. detect_details2.py # Main detection script
+4. requirements.txt
+5. README.md
 
 ---
 
 ## ⚙️ Traffic Signal Logic
 
 ### Priority Formula:
-```bash
+```markdown
 Priority = (Vehicle Count × 2) + (Waiting Time × 1)
 ```
 
 
 ### Signal Rules:
 
-- Minimum Green Time: 2 sec  
-- Maximum Green Time: 3 sec  
+- Minimum Green Time: 15 sec  
+- Maximum Green Time: 60 sec  
 - Lane with highest priority → GREEN  
 - Other lanes → RED  
 - Emergency vehicles → Instant GREEN 🚑  
@@ -153,7 +151,6 @@ Not intended for direct deployment in real-world traffic systems without testing
 
 ## 🙏 Acknowledgements
 
->>>>>>> fb5c5b9de8c78e98f66e56027438b76c01d74529
 This project uses:
 
 - Ultralytics YOLOv5  
@@ -177,8 +174,7 @@ This project follows the **AGPL-3.0 License** (same as YOLOv5).
 
 ## ⭐ Support
 
-<<<<<<< HEAD
 If you like this project, consider giving it a ⭐ on GitHub!
 =======
-If you like this project, consider giving it a ⭐ on GitHub!
->>>>>>> fb5c5b9de8c78e98f66e56027438b76c01d74529
+
+
