@@ -1,0 +1,655 @@
+TRAFFIC DETECTION PROJECT FLOW EXPLANATION
+Frontend excluded as requested
+
+============================================================
+1. HIGH LEVEL FLOW CHART
+============================================================
+
+START
+  |
+  v
+Run backend/server.js
+  |
+  v
+Create Express server + HTTP server + Socket.IO server
+  |
+  v
+Initialize default traffic data
+  |
+  v
+startPython()
+  |
+  v
+Spawn Python process
+  |
+  +--> python ../Model/detect_details.py or detect_details2.py
+       --weights ../Model/runs/train/ambulance_v1/weights/best.pt
+       --source ../videos/lane1.mp4 ../videos/lane2.mp4 ../videos/lane3.mp4 ../videos/lane4.mp4
+       --imgsz 416
+       |
+       v
+Python loads YOLO model
+       |
+       v
+Open 4 video sources with OpenCV
+       |
+       v
+If using detect_details2.py:
+Start Flask video server in background thread on port 8000
+       |
+       v
+Main infinite detection loop
+       |
+       +--> Read one frame from each lane video
+       |
+       +--> If video ends, reset it to first frame
+       |
+       +--> INITIAL_SCAN mode:
+       |      Detect all lanes for a short initial period
+       |      Count vehicles in every lane
+       |      Detect ambulance/emergency lane if present
+       |      Choose best lane for green signal
+       |
+       +--> GREEN mode:
+       |      Detect current green lane continuously
+       |      Other lanes keep waiting
+       |      After MIN_GREEN_TIME, scan all lanes again
+       |      Choose next best green lane
+       |
+       +--> Update waiting time for red lanes
+       |
+       +--> Build JSON object:
+              lane1, lane2, lane3, lane4,
+              green_lane, wait, emergency, mode
+       |
+       +--> Print JSON to stdout
+       |
+       v
+Node backend receives Python stdout
+  |
+  v
+Backend buffers stdout lines
+  |
+  v
+Parse each complete line as JSON
+  |
+  v
+If data changed:
+  update latestData
+  emit "traffic-update" through Socket.IO
+  |
+  v
+If Python process exits:
+  wait 2 seconds
+  restart Python process
+  |
+  v
+LOOP CONTINUES
+
+
+============================================================
+2. BACKEND CODE FLOW: backend/server.js
+============================================================
+
+The backend is responsible for starting the Python detection script and
+forwarding live traffic data through Socket.IO.
+
+Step 1: Imports
+------------------------------------------------------------
+server.js imports:
+
+- express
+  Used to create the backend app.
+
+- cors
+  Allows requests from the frontend origin.
+
+- child_process.spawn
+  Starts the Python traffic detection script as a child process.
+
+- http
+  Wraps the Express app in an HTTP server.
+
+- socket.io Server
+  Sends real-time traffic updates to connected clients.
+
+
+Step 2: Server setup
+------------------------------------------------------------
+The file creates:
+
+- app = express()
+- server = http.createServer(app)
+- io = new Server(server, { cors: { origin: "http://localhost:3000" } })
+
+The backend listens on port 5000.
+
+
+Step 3: Default traffic data
+------------------------------------------------------------
+latestData starts with safe default values:
+
+- lane1 to lane4 are 0
+- green_lane is 1
+- wait is [0, 0, 0, 0]
+- emergency is false
+- mode is "LOADING"
+
+This means clients can receive a valid response even before Python sends
+the first detection result.
+
+
+Step 4: startPython()
+------------------------------------------------------------
+startPython() starts the Python script using spawn().
+
+Current backend command:
+
+python ../Model/detect_details.py
+  --weights ../Model/runs/train/ambulance_v1/weights/best.pt
+  --source ../videos/lane1.mp4 ../videos/lane2.mp4 ../videos/lane3.mp4 ../videos/lane4.mp4
+  --imgsz 416
+
+Important note:
+detect_details.py sends JSON traffic data.
+detect_details2.py also starts a Flask video stream server on port 8000.
+If the project needs live camera/video stream endpoints, the backend should
+spawn detect_details2.py instead of detect_details.py.
+
+
+Step 5: Reading Python stdout
+------------------------------------------------------------
+Python prints JSON using print(json.dumps(data), flush=True).
+
+Node receives that output in chunks. A chunk may contain:
+
+- one complete JSON line
+- many JSON lines
+- half of a JSON line
+
+That is why server.js uses a buffer:
+
+- append new stdout text to buffer
+- split buffer by newline
+- keep the last incomplete part in buffer
+- parse only complete lines
+
+This avoids JSON parse errors when Python output is split across chunks.
+
+
+Step 6: Sending only changed data
+------------------------------------------------------------
+server.js converts parsed JSON to a string and compares it with lastSentData.
+
+If the JSON is different:
+
+- latestData is updated
+- lastSentData is updated
+- io.emit("traffic-update", latestData) sends it to all connected clients
+
+This reduces unnecessary socket messages.
+
+
+Step 7: Python stderr handling
+------------------------------------------------------------
+The backend listens to Python stderr but only prints important messages:
+
+- messages containing "Error"
+- messages containing "Traceback"
+
+This keeps the backend console cleaner.
+
+
+Step 8: Python restart behavior
+------------------------------------------------------------
+If the Python process closes, server.js waits 2 seconds and calls
+startPython() again.
+
+This makes the system self-recover when Python crashes or exits.
+
+
+============================================================
+3. PYTHON CODE FLOW: Model/detect_details2.py
+============================================================
+
+detect_details2.py is the richer version of the model script because it
+does two jobs:
+
+1. Detect traffic state and print JSON for the backend.
+2. Serve live processed frames through Flask video endpoints.
+
+
+Step 1: Imports and path setup
+------------------------------------------------------------
+The script imports:
+
+- argparse for command-line arguments
+- json for sending structured output
+- numpy, torch, cv2 for model and image processing
+- threading and time for the Flask background server
+- Flask and Response for MJPEG video streaming
+- YOLOv5 helper functions and model classes
+
+It also adds the Model folder to sys.path so imports like models.common
+and utils.general work correctly.
+
+
+Step 2: Global settings
+------------------------------------------------------------
+Important constants:
+
+- NUM_LANES = 4
+  The system works with four lanes.
+
+- INITIAL_SCAN_TIME = 1
+  The first scan lasts about 1 second.
+
+- MIN_GREEN_TIME = 15
+  A lane keeps green for at least 15 seconds before all lanes are scanned
+  again.
+
+- MAX_WAIT_TIME = 60
+  A lane should not wait more than 60 seconds.
+
+- FPS = 30
+  Used to convert frame counts into seconds.
+
+- JSON_INTERVAL = 10
+  JSON is printed every 10 frames, about every 0.3 seconds if running near
+  30 FPS.
+
+
+Step 3: Runtime state variables
+------------------------------------------------------------
+The script tracks:
+
+- current_green
+  Zero-based index of the lane currently getting green signal.
+
+- mode
+  Starts as "INITIAL_SCAN", then changes to "GREEN".
+
+- mode_timer
+  Counts how many frames have passed in the current mode.
+
+- lane_wait_time
+  Stores wait duration in frames for each lane.
+
+- last_lane_counts
+  Stores last detected vehicle count for each lane.
+
+- latest_frames
+  Stores the latest processed frame for every lane. Flask uses these frames
+  for live video streaming.
+
+
+============================================================
+4. FLASK VIDEO STREAM FLOW IN detect_details2.py
+============================================================
+
+Flow chart:
+
+main()
+  |
+  v
+Start background thread: start_flask()
+  |
+  v
+Flask app runs on 0.0.0.0:8000
+  |
+  v
+Route /video/<lane_id>
+  |
+  v
+generate_stream(lane_id)
+  |
+  v
+Read latest_frames[lane_id]
+  |
+  +--> If frame is None:
+  |      sleep briefly and retry
+  |
+  +--> If frame exists:
+         resize to 640x360
+         encode as JPEG
+         yield frame as multipart MJPEG
+
+
+Explanation:
+------------------------------------------------------------
+The Python script stores processed frames in latest_frames.
+The Flask route /video/<lane_id> continuously serves those frames as MJPEG.
+
+For example:
+
+- http://localhost:8000/video/0 shows lane 1
+- http://localhost:8000/video/1 shows lane 2
+- http://localhost:8000/video/2 shows lane 3
+- http://localhost:8000/video/3 shows lane 4
+
+The stream does not run detection itself. It only serves the most recent
+frame created by the detection loop.
+
+
+============================================================
+5. VEHICLE DETECTION FLOW IN detect_details2.py
+============================================================
+
+Function:
+detect_vehicles(frame, model, device, imgsz, stride, names,
+                conf_thres, iou_thres, half)
+
+Flow chart:
+
+Input OpenCV frame
+  |
+  v
+letterbox resize/pad frame for YOLO
+  |
+  v
+Convert BGR image to RGB
+  |
+  v
+Transpose image from HWC to CHW
+  |
+  v
+Convert NumPy array to Torch tensor
+  |
+  v
+Move tensor to selected device
+  |
+  v
+Use half precision if GPU is available
+  |
+  v
+Normalize pixels from 0-255 to 0-1
+  |
+  v
+Add batch dimension
+  |
+  v
+Run YOLO model inference
+  |
+  v
+Apply non-max suppression
+  |
+  v
+For each detection:
+  scale box back to original frame size
+  read class label
+  if label == "ambulance", mark emergency true
+  increment vehicle count
+  draw bounding box
+  draw label text
+  |
+  v
+Return processed frame, count, emergency
+
+
+Important behavior:
+------------------------------------------------------------
+Every detected object increases count. The code does not currently filter
+only cars, bikes, buses, trucks, or ambulances. If the model detects other
+classes, they will also be counted.
+
+Emergency detection is based on this exact condition:
+
+label == "ambulance"
+
+So the trained model must have a class named ambulance for emergency mode
+to work correctly.
+
+
+============================================================
+6. LANE PRIORITY FLOW
+============================================================
+
+Function:
+get_best_lane(finished, emergency_lane)
+
+Flow chart:
+
+Is there an emergency lane?
+  |
+  +--> Yes and lane is not finished:
+  |      return emergency lane
+  |
+  +--> No:
+         Check all lanes for max wait time
+              |
+              +--> If any lane waited >= MAX_WAIT_TIME:
+              |      return that lane
+              |
+              +--> Otherwise:
+                     return lane with highest vehicle count
+
+
+Priority order:
+------------------------------------------------------------
+1. Ambulance/emergency lane gets highest priority.
+2. Lane that has waited too long gets next priority.
+3. Otherwise, the lane with the highest detected vehicle count gets green.
+
+
+============================================================
+7. MAIN DETECTION LOOP IN detect_details2.py
+============================================================
+
+Function:
+run(weights, sources, imgsz=(640, 640), conf_thres=0.35,
+    iou_thres=0.45, device="")
+
+
+Step 1: Prepare device and model
+------------------------------------------------------------
+The script selects CPU or GPU using select_device().
+
+Then it loads the YOLO model:
+
+DetectMultiBackend(weights, device=device)
+
+It reads:
+
+- stride
+- class names
+
+It checks image size using check_img_size().
+
+If running on GPU, it enables half precision to improve speed.
+
+It also warms up the model with a dummy tensor before real inference.
+
+
+Step 2: Open video sources
+------------------------------------------------------------
+The script opens all source videos:
+
+caps = [cv2.VideoCapture(src) for src in sources]
+
+The expected sources are:
+
+- lane1.mp4
+- lane2.mp4
+- lane3.mp4
+- lane4.mp4
+
+
+Step 3: Infinite loop starts
+------------------------------------------------------------
+The loop never ends under normal operation.
+
+Every loop cycle:
+
+- resets emergency_lane to -1
+- reads one frame from every lane
+- if a video ends, it resets that video to frame 0
+- stores frames in a list
+
+
+Step 4: INITIAL_SCAN mode
+------------------------------------------------------------
+At startup, mode is "INITIAL_SCAN".
+
+During this mode:
+
+- every lane is detected
+- count is saved in last_lane_counts
+- emergency lane is detected if ambulance appears
+- processed frames are saved in latest_frames
+
+After INITIAL_SCAN_TIME * FPS frames:
+
+- get_best_lane() selects the first green lane
+- mode becomes "GREEN"
+- mode_timer resets to 0
+
+
+Step 5: GREEN mode
+------------------------------------------------------------
+In GREEN mode, the script loops over all lanes.
+
+For the current green lane:
+
+- it runs detection
+- updates vehicle count
+- checks for emergency
+- stores processed frame with boxes
+
+For red lanes:
+
+- it does not run detection every frame
+- it stores the normal frame as latest frame
+
+This saves compute because the model is not run on all four lanes every
+single frame.
+
+After MIN_GREEN_TIME * FPS frames:
+
+- all lanes are scanned again
+- latest counts are refreshed
+- emergency lane is checked again
+- get_best_lane() selects the next green lane
+- mode_timer resets
+
+
+Step 6: Wait time update
+------------------------------------------------------------
+For each lane:
+
+- if lane is green, its wait time becomes 0
+- if lane is red, its wait time increases by 1 frame
+- wait time is capped at MAX_WAIT_TIME * FPS
+
+When JSON is created, wait time is converted from frames to seconds.
+
+
+Step 7: JSON output
+------------------------------------------------------------
+Every JSON_INTERVAL frames, Python builds:
+
+{
+  "lane1": count,
+  "lane2": count,
+  "lane3": count,
+  "lane4": count,
+  "green_lane": current_green + 1,
+  "wait": [wait1, wait2, wait3, wait4],
+  "emergency": true_or_false,
+  "mode": "INITIAL_SCAN" or "GREEN"
+}
+
+Then it prints the JSON with flush=True.
+
+flush=True is important because Node needs to receive output immediately.
+
+
+============================================================
+8. COMMAND-LINE ARGUMENT FLOW
+============================================================
+
+parse_opt() reads:
+
+- --weights
+  Path to the trained YOLO model weights.
+
+- --source
+  One or more video/camera sources. This project passes four lane videos.
+
+- --imgsz
+  Inference image size. The backend uses 416 for speed.
+
+- --conf-thres
+  Confidence threshold. Default is 0.35.
+
+If only one image size is provided, the script duplicates it.
+
+Example:
+
+--imgsz 416
+
+becomes:
+
+[416, 416]
+
+
+============================================================
+9. COMPLETE BACKEND + MODEL DATA FLOW
+============================================================
+
+backend/server.js
+  |
+  | starts
+  v
+Model/detect_details2.py
+  |
+  | loads model and videos
+  v
+OpenCV frames
+  |
+  | processed by YOLO
+  v
+Vehicle count + ambulance check + lane decision
+  |
+  | Python prints JSON
+  v
+Node stdout listener
+  |
+  | parse JSON
+  v
+latestData
+  |
+  | emit changed data
+  v
+Socket.IO event: traffic-update
+
+For video stream:
+
+Model/detect_details2.py
+  |
+  | stores latest processed frames
+  v
+Flask /video/<lane_id>
+  |
+  | serves MJPEG stream
+  v
+Live lane video endpoint on port 8000
+
+
+============================================================
+10. IMPORTANT CURRENT PROJECT NOTE
+============================================================
+
+Your backend currently spawns:
+
+../Model/detect_details.py
+
+But the live video streaming code exists in:
+
+../Model/detect_details2.py
+
+So if you want the backend to start both traffic JSON and video streaming,
+server.js should spawn detect_details2.py.
+
+detect_details.py is good for dashboard JSON.
+detect_details2.py is better when you also want live processed camera feeds.
+
