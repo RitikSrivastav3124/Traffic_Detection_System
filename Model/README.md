@@ -166,7 +166,6 @@ Special thanks to the authors for their open-source contribution.
 ## 📜 License
 
 This project follows the **AGPL-3.0 License** (same as YOLOv5).  
-Make sure to comply with it if used commercially.
 
 ---
 
